@@ -1,0 +1,21 @@
+#floating-panel {
+  position: absolute;
+  
+  left: 25%;
+  z-index: 4;
+  background-color: #fff;
+  padding-right: 3px;
+  text-align: center;
+  font-family: 'Roboto','sans-serif';
+  line-height: 27px;
+  border-radius: 3px;'
+  
+  height: 30px;
+  width: 56px;
+  background:rgba(255,255,255,0.7);
+
+}
+
+.ui-icon {
+  font-size: 25px;
+}
