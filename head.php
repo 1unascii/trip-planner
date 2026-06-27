@@ -24,6 +24,7 @@
     <!--JQUERY ICON TOOLS-->
     <link href="js/jquery/jquery-ui-iconfont-master/jquery-ui.icon-font.css" rel="stylesheet" type="text/css" />
 
-<!--STYLES-->
-    
+<!--GOOGLE MAPS API (needed for Directions Service in optimize)-->
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDDeH40bvCz2KobqJmu0WYrItk5l7cU2fU"></script>
+
 </head>

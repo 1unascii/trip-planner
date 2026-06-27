@@ -1,168 +1,189 @@
+/**
+ * ════════════════════════════════════════════════════════════════
+ * TRIP PLANNER MAP
+ * ════════════════════════════════════════════════════════════════
+ * Renders a Google Map inside an iframe and draws driving routes
+ * between stops passed via URL parameters.
+ *
+ * URL format:
+ *   index.php?center=Madison+WI&addresses=Rockford%2C+IL|Mason+City%2C+IA
+ *
+ * Parameters:
+ *   center    — address to center the map on (usually the first stop)
+ *   addresses — stops separated by | (pipe), or "0" for no stops
+ *
+ * Route drawing flow:
+ *   ┌────────────┐     ┌─────────────┐     ┌──────────────┐
+ *   │ URL params │────>│ geocode     │────>│ create map   │
+ *   │ center=... │     │ center addr │     │ at coords    │
+ *   │ addresses= │     └─────────────┘     └──────┬───────┘
+ *   │ A|B|C      │                                │
+ *   └────────────┘                                v
+ *                                          ┌──────────────┐
+ *                                          │ drawRoute()  │
+ *                                          │ A ──> B ──> C│
+ *                                          │ (Directions  │
+ *                                          │  API)        │
+ *                                          └──────────────┘
+ */
+
+// ── PARSE URL PARAMETERS ───────────────────────────────────────
+// Reads ?key=value&key2=value2 from the iframe's URL into $_GET.
+// Handles URL encoding (+ becomes space, %XX decoded).
 var $_GET = {};
-  var errors = [];
-  var center;
-  var locations = [];
-  //var shipping_addresses = [];
-  var markers = [];
-  var centerCoords = {"lat": 0, "lng": 0};
 
-  document.location.search.replace(/\??(?:([^=]+)=([^&]*)&?)/g, function () {
-      function decode(s) {
-          return decodeURIComponent(s.split("+").join(" "));
-      }
+document.location.search.replace(/\??(?:([^=]+)=([^&]*)&?)/g, function () {
+    function decode(s) {
+        return decodeURIComponent(s.split("+").join(" "));
+    }
     $_GET[decode(arguments[1])] = decode(arguments[2]);
-  });
+});
 
-  function initMap() {
+/**
+ * initMap() — Google Maps callback
+ * Called automatically when the Google Maps API script loads
+ * (via the &callback=initMap parameter in the script tag).
+ */
+function initMap() {
 
+    // ── MAP STYLING ────────────────────────────────────────────
+    // Desaturated grey theme with dark water
     var styles = [
-      {
-          "stylers": [
-              {
-                  "hue": "#ff1a00"
-              },
-              {
-                  "invert_lightness": false
-              },
-              {
-                  "saturation": -100
-              },
-              {
-                  "lightness": 33
-              },
-              {
-                  "gamma": 0.5
-              }
-          ]
-      },
-      {
-          "featureType": "water",
-          "elementType": "geometry",
-          "stylers": [
-              {
-                  "color": "#2D333C"
-              }
-
-
-          ]
-      }
+        { "stylers": [{ "hue": "#ff1a00" }, { "saturation": -100 }, { "lightness": 33 }, { "gamma": 0.5 }] },
+        { "featureType": "water", "elementType": "geometry", "stylers": [{ "color": "#2D333C" }] }
     ];
 
+    // ── PARSE ADDRESSES ────────────────────────────────────────
+    // Split on | (pipe) since addresses contain commas.
+    // "0" means no addresses (initial load with empty sidebar).
+    var rawAddresses = $_GET['addresses'];
+    var addresses = (rawAddresses && rawAddresses !== '0') ? rawAddresses.split("|") : [];
+    var center = $_GET['center'] || 'Madison WI';
+
+    // ── GEOCODE THE CENTER ADDRESS ─────────────────────────────
+    // Convert the center address string to lat/lng coordinates,
+    // then create the map at that location.
     var geocoder = new google.maps.Geocoder();
-    addresses = $_GET['addresses'].split(",");//Do not move!!!
-    center = $_GET['center'];
-    var count = 0;
-    
-    for(var i = 0; i < addresses.length; i++) {
-      
-      geocoder.geocode({'address': addresses[i]}, function(results, status) {
-        if (status === google.maps.GeocoderStatus.OK) {
+    var map;
 
-          count++;//count *inside* the function, which is inside the loop
-
-          locations.push({ 
-            address: results[0].address_components[0].short_name, 
-            lat: results[0].geometry.location.lat(), 
-            lng: results[0].geometry.location.lng(),
-            index: count 
-          });
-          
-        } else {
-          alert('Geocode was not successful for the following reason: ' + status);
+    geocoder.geocode({ 'address': center }, function(results, status) {
+        if (status !== google.maps.GeocoderStatus.OK) {
+            // Fallback to Madison, WI if geocoding fails
+            createMap({ lat: 43.0731, lng: -89.4012 });
+            return;
         }
-      });
-    } 
-    
-
-    geocoder.geocode({'address': center}, function(results, status) {
-      if (status === google.maps.GeocoderStatus.OK) {
-        centerCoords.lat = results[0].geometry.location.lat();
-        centerCoords.lng = results[0].geometry.location.lng();
-      }
+        createMap({
+            lat: results[0].geometry.location.lat(),
+            lng: results[0].geometry.location.lng()
+        });
     });
 
-    window.onload = function() {
+    /**
+     * createMap(centerCoords)
+     * Builds the map object with custom styling, then either draws
+     * a route (2+ stops) or places a single marker (1 stop).
+     *
+     *   2+ stops:  drawRoute() handles markers + route line
+     *   1 stop:    placeMarker() drops a single pin
+     *   0 stops:   just the map, no markers
+     */
+    function createMap(centerCoords) {
+        var styledMap = new google.maps.StyledMapType(styles, { name: "Styled Map" });
 
-      // Create a new StyledMapType object, passing it the array of styles,
-      // as well as the name to be displayed on the map type control.
-      var styledMap = new google.maps.StyledMapType(styles,
-        {name: "Styled Map"});
+        map = new google.maps.Map(document.getElementById('map'), {
+            zoom: 9,
+            center: new google.maps.LatLng(centerCoords.lat, centerCoords.lng),
+            mapTypeControlOptions: {
+                mapTypeIds: [google.maps.MapTypeId.ROADMAP, 'map_style']
+            }
+        });
 
-      // Create a map object, and include the MapTypeId to add
-      // to the map type control.
-      var mapOptions = {
-        zoom: 9,
-        center: new google.maps.LatLng(centerCoords.lat, centerCoords.lng),
-        mapTypeControlOptions: {
-          mapTypeIds: [google.maps.MapTypeId.ROADMAP, 'map_style']
+        // Apply the custom grey style
+        map.mapTypes.set('map_style', styledMap);
+        map.setMapTypeId('map_style');
+
+        if (addresses.length >= 2) {
+            drawRoute(map, addresses);
+        } else if (addresses.length === 1) {
+            placeMarker(map, geocoder, addresses[0]);
         }
-      };
+    }
 
-      var map = new google.maps.Map(document.getElementById('map'),
-        mapOptions);
+    /**
+     * placeMarker(map, geocoder, address)
+     * Geocodes a single address and drops a marker on the map.
+     * Used when there's only one stop (no route to draw).
+     */
+    function placeMarker(map, geocoder, address) {
+        geocoder.geocode({ 'address': address }, function(results, status) {
+            if (status === google.maps.GeocoderStatus.OK) {
+                new google.maps.Marker({
+                    position: results[0].geometry.location,
+                    map: map,
+                    title: address
+                });
+            }
+        });
+    }
 
-      //Associate the styled map with the MapTypeId and set it to display.
-      map.mapTypes.set('map_style', styledMap);
-      map.setMapTypeId('map_style');
+    /**
+     * drawRoute(map, stops)
+     * Uses the Google Directions API to calculate and render a
+     * driving route between all stops.
+     *
+     * The first stop is the origin, the last is the destination,
+     * and everything in between becomes waypoints:
+     *
+     *   stops = ["NYC", "Chicago", "Denver", "LA"]
+     *
+     *   origin:      NYC
+     *   waypoints:   [Chicago, Denver]   (stopover: true = stop here)
+     *   destination: LA
+     *
+     *   ┌─────┐     ┌─────────┐     ┌────────┐     ┌────┐
+     *   │ NYC │────>│ Chicago │────>│ Denver │────>│ LA │
+     *   └─────┘     └─────────┘     └────────┘     └────┘
+     *   origin       waypoint        waypoint     destination
+     *
+     * optimizeWaypoints: true tells Google to reorder the
+     * waypoints for the shortest total driving distance.
+     * The origin and destination stay fixed.
+     *
+     * DirectionsRenderer draws the blue route line and places
+     * labeled markers (A, B, C, D) at each stop automatically.
+     */
+    function drawRoute(map, stops) {
+        var directionsService = new google.maps.DirectionsService();
+        var directionsRenderer = new google.maps.DirectionsRenderer({
+            map: map,
+            suppressMarkers: false   // show A, B, C markers
+        });
 
-      setMarkers(map);
-      
-      function setMarkers(map) {
+        var origin = stops[0];
+        var destination = stops[stops.length - 1];
 
-        deleteMarkers();
-
-        //loading some images that can be later used as markers
-        /*var fedExImage = {
-          url: 'custom-markers/images/fedex.png',
-          size: new google.maps.Size(32, 32),
-          origin: new google.maps.Point(0, 0),
-          anchor: new google.maps.Point(16, 16)
-        };*/
-        
-        var shape = {
-          coords: [1, 1, 1, 20, 18, 20, 18, 1],
-          type: 'poly'
-        };
-
-        //for every location
-        for (var i = 0; i < locations.length; i++) {
-          
-          //marker image can be chosen here instead
-
-          //create a new marker
-          var marker = new google.maps.Marker({
-
-            //place the marker at the locations lat and lng positions ...of course
-            position: {lat: Number(locations[i].lat), lng: Number(locations[i].lng)},
-            map: map, //the map object
-            icon: image, //whatever image we decide to use
-            shape: shape, //not sure what this is something to do with the shape of the image?
-            title: String(locations[i].address),
-            zIndex: Number(locations[i].index)
-
-          });
-          markers.push(marker); //add the marker to an array
+        // Build waypoints array from the middle stops
+        var waypoints = [];
+        for (var i = 1; i < stops.length - 1; i++) {
+            waypoints.push({
+                location: stops[i],
+                stopover: true
+            });
         }
-      }
 
-      // Sets the map on all markers in the array.
-      function setMapOnAll(map) {
-        for (var i = 0; i < markers.length; i++) {
-          markers[i].setMap(map);
-        }
-      }
-
-      // Removes the markers from the map, but keeps them in the array.
-      function clearMarkers() {
-        setMapOnAll(null);
-      }
-
-
-      // Deletes all markers in the array by removing references to them.
-      function deleteMarkers() {
-        clearMarkers();
-        markers = [];
-      }
-
-    };  
-  }
+        directionsService.route({
+            origin: origin,
+            destination: destination,
+            waypoints: waypoints,
+            optimizeWaypoints: false,  // draw the route in the order given, don't reorder
+            travelMode: google.maps.TravelMode.DRIVING
+        }, function(response, status) {
+            if (status === 'OK') {
+                // DirectionsRenderer draws the route line and markers
+                directionsRenderer.setDirections(response);
+            } else {
+                alert('Could not calculate route: ' + status);
+            }
+        });
+    }
+}

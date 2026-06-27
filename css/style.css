@@ -1,21 +1,26 @@
 #floating-panel {
   position: absolute;
-  
-  left: 25%;
-  z-index: 4;
-  background-color: #fff;
-  padding-right: 3px;
-  text-align: center;
-  font-family: 'Roboto','sans-serif';
-  line-height: 27px;
-  border-radius: 3px;'
-  
-  height: 30px;
-  width: 56px;
-  background:rgba(255,255,255,0.7);
-
+  top: 60px;
+  left: 10px;
+  z-index: 100;
+  display: flex;
+  gap: 5px;
 }
 
-.ui-icon {
-  font-size: 25px;
+#floating-panel a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: rgba(255,255,255,0.9);
+  border-radius: 4px;
+  text-decoration: none;
+  font-size: 20px;
+  color: #333;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+}
+
+#floating-panel a:hover {
+  background: #fff;
 }
