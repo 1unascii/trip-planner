@@ -24,7 +24,8 @@
     <!--JQUERY ICON TOOLS-->
     <link href="js/jquery/jquery-ui-iconfont-master/jquery-ui.icon-font.css" rel="stylesheet" type="text/css" />
 
-<!--GOOGLE MAPS API (needed for Directions Service in optimize)-->
-    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDDeH40bvCz2KobqJmu0WYrItk5l7cU2fU"></script>
+    <!--GOOGLE MAPS API removed from parent page — Directions/Geocoding
+        now use server-side proxy (api/directions.php). The Maps JS API
+        is only loaded in the map iframe via map/google-api-key.php. -->
 
 </head>

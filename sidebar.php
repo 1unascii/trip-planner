@@ -160,28 +160,24 @@ $(document).ready(function() {
 
     var origin = stops[0];
     var destination = stops[stops.length - 1];
-    var waypoints = [];
+    var middleStops = [];
     for (var i = 1; i < stops.length - 1; i++) {
-      waypoints.push({ location: stops[i], stopover: true });
+      middleStops.push(stops[i]);
     }
 
-    var directionsService = new google.maps.DirectionsService();
-    directionsService.route({
-      origin: origin,
-      destination: destination,
-      waypoints: waypoints,
-      optimizeWaypoints: false,
-      travelMode: google.maps.TravelMode.DRIVING
-    }, function(response, status) {
-      if (status !== 'OK') {
+    // Use server-side proxy to hide API key
+    var url = 'api/directions.php'
+      + '?origin=' + encodeURIComponent(origin)
+      + '&destination=' + encodeURIComponent(destination);
+    if (middleStops.length > 0) {
+      url += '&waypoints=' + encodeURIComponent(middleStops.join('|'));
+    }
+
+    $.getJSON(url, function(response) {
+      if (response.status !== 'OK') {
         $('#route-info').hide();
         return;
       }
-      // Sum up distance and duration across all legs
-      //   leg 0: origin → waypoint 1
-      //   leg 1: waypoint 1 → waypoint 2
-      //   ...
-      //   leg N: last waypoint → destination
       var totalMeters = 0;
       var totalSeconds = 0;
       var legs = response.routes[0].legs;
@@ -312,19 +308,16 @@ $(document).ready(function() {
       waypoints.push(stops[i]);
     }
 
-    // Ask Google Directions API for the optimal waypoint order.
-    // optimizeWaypoints: true tells Google to return waypoint_order,
-    // an array mapping original indices to their optimal positions.
-    var directionsService = new google.maps.DirectionsService();
-    directionsService.route({
-      origin: origin,
-      destination: destination,
-      waypoints: waypoints.map(function(w) { return { location: w, stopover: true }; }),
-      optimizeWaypoints: true,
-      travelMode: google.maps.TravelMode.DRIVING
-    }, function(response, status) {
-      if (status !== 'OK') {
-        alert('Could not optimize: ' + status);
+    // Use server-side proxy with optimize flag to get optimal order
+    var url = 'api/directions.php'
+      + '?origin=' + encodeURIComponent(origin)
+      + '&destination=' + encodeURIComponent(destination)
+      + '&waypoints=' + encodeURIComponent(waypoints.join('|'))
+      + '&optimize=true';
+
+    $.getJSON(url, function(response) {
+      if (response.status !== 'OK') {
+        alert('Could not optimize: ' + response.status);
         return;
       }
 
